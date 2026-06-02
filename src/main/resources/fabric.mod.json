@@ -16,20 +16,20 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"turniplabs.examplemod.ExampleMod"
+			"deus.theyaresmarter.TheyAreSmarter"
 		],
 		"beforeGameStart": [
-			"turniplabs.examplemod.ExampleMod"
+			"deus.theyaresmarter.TheyAreSmarter"
 		],
 		"afterGameStart": [
-			"turniplabs.examplemod.ExampleMod"
+			"deus.theyaresmarter.TheyAreSmarter"
 		],
 		"recipesReady": [
-			"turniplabs.examplemod.ExampleMod"
+			"deus.theyaresmarter.TheyAreSmarter"
 		]
 	},
 	"mixins": [
-		"examplemod.mixins.json"
+		"theyaresmarter.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=${fabricloader}",

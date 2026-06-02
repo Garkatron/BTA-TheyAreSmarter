@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "deus.theyaresmarter.mixin",
+  "compatibilityLevel": "JAVA_${java}",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+    "EntityAccessor",
+    "MobAccessor",
+    "MobPathfinderAccessor",
+    "MobPathfinderMixin"
+  ],
+  "client": []
+}
