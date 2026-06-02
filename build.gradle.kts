@@ -51,6 +51,8 @@ dependencies {
 	// If you do not need Halplibe you can comment out or delete this line.
 	implementation(libs.halplibe)
 	implementation(libs.modMenu)
+	implementation(libs.brainless)
+
 	implementation(libs.legacyLwjgl)
 
 	implementation(libs.slf4jApi)
