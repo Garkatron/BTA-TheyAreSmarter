@@ -37,7 +37,7 @@ public class MobPathfinderMixin extends Mob {
 		MobPathfinder self = (MobPathfinder) (Object) this;
 		MobPathfinderAccessor accessor = (MobPathfinderAccessor) this;
 		accessor.setHasAttacked(accessor.callIsMovementCeased());
-
+		accessor.setDoRandomWalk(false);
 		Entity target = self.getTarget();
 		if (target == null) {
 			target = accessor.callFindPlayerToAttack();

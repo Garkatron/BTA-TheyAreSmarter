@@ -14,6 +14,7 @@ public class TheyAreSmarter implements ModInitializer, GameStartEntrypoint, Reci
 	@Override
 	public void onInitialize() {
 		LOGGER.info("ExampleMod initialized.");
+
 	}
 
 	@Override

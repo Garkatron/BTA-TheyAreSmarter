@@ -4,13 +4,13 @@ import de.bsommerfeld.pathetic.api.pathing.INeighborStrategy;
 import de.bsommerfeld.pathetic.api.pathing.NeighborStrategies;
 import de.bsommerfeld.pathetic.api.pathing.Pathfinder;
 import de.bsommerfeld.pathetic.api.pathing.configuration.PathfinderConfiguration;
+import de.bsommerfeld.pathetic.api.pathing.heuristic.HeuristicStrategies;
+import de.bsommerfeld.pathetic.api.pathing.heuristic.HeuristicWeights;
 import de.bsommerfeld.pathetic.api.pathing.processing.ValidationProcessor;
 import de.bsommerfeld.pathetic.api.pathing.result.Path;
 import de.bsommerfeld.pathetic.api.provider.NavigationPointProvider;
 import de.bsommerfeld.pathetic.api.wrapper.PathPosition;
 import de.bsommerfeld.pathetic.engine.factory.AStarPathfinderFactory;
-import deus.brainless.Brainless;
-import deus.brainless.pathfinding.DefaultWalkValidator;
 import deus.theyaresmarter.mixin.MobAccessor;
 import deus.theyaresmarter.mixin.MobPathfinderAccessor;
 import deus.theyaresmarter.util.PoscArea;
@@ -34,14 +34,14 @@ public class PathfinderController {
 
 	protected int maxIterations = 10_000;
 	protected int maxLength = 128;
-	protected INeighborStrategy strategy = NeighborStrategies.DIAGONAL_3D;
-	protected double arrivalThreshold = 1.0D;
+	protected INeighborStrategy strategy = NeighborStrategies.VERTICAL_AND_HORIZONTAL;
+	protected double arrivalThreshold = 1.2D;
 	protected int recomputeInterval = 60;
 
 	protected PathfinderConfiguration pathFinderConfig;
 	protected NavigationPointProvider provider = (pos, ctx) -> () -> true;
 	protected Pathfinder pathfinder;
-	private static final double RETARGET_THRESHOLD = 2.0;
+	private static final double RETARGET_THRESHOLD = 2.5;
 
 	@Nullable
 	private TilePos targetTilePos;
@@ -68,6 +68,9 @@ public class PathfinderController {
 			.maxIterations(maxIterations)
 			.maxLength(maxLength)
 			.neighborStrategy(strategy)
+			.heuristicWeights(HeuristicWeights.create(0.5, 1, 0.7, 0.3))
+			.heuristicStrategy(HeuristicStrategies.SQUARED)
+			.costProcessor(List.of(new BlockCostProcessor(mob.world)))
 			.validationProcessors(buildValidators())
 			.provider(provider)
 			.build();
@@ -98,30 +101,45 @@ public class PathfinderController {
 	public void tick() {
 		pathThinking();
 		pathMotion();
+		spawnPathParticles();
 	}
 
-	public void setTarget(TilePos target) {
-		if (target == null || target.equals(this.targetTilePos)) {
+	public void setTarget(@Nullable TilePos target) {
+		if (target == null) {
+			if (this.targetTilePos == null) return;
+			this.targetTilePos = null;
+			this.lastTargetTilePos = null;
+			invalidatePath("target cleared");
 			return;
 		}
+
 		if (this.targetTilePos != null) {
 			double dx = target.x - this.targetTilePos.x;
 			double dz = target.z - this.targetTilePos.z;
 			if (dx*dx + dz*dz < RETARGET_THRESHOLD * RETARGET_THRESHOLD) {
-				this.targetTilePos = target;
 				return;
 			}
 		}
 
 		this.lastTargetTilePos = this.targetTilePos;
-		this.targetTilePos = target;
+		this.targetTilePos = new TilePos(target);
 		invalidatePath("target moved significantly");
 	}
-
 	public Optional<TilePos> getTargetTilePos() {
 		return targetTilePos == null
 			? Optional.empty()
 			: Optional.of(new TilePos(targetTilePos));
+	}
+
+	private void spawnPathParticles() {
+		if (nodes == null) return;
+		int end = Math.min(pathIndex + 20, nodes.size());
+		for (int i = pathIndex; i < end; i++) {
+			PathPosition p = nodes.get(i);
+			mob.world.spawnParticle("reddust",
+				p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5,
+				0.0, 0.0, 0.0, 0, false);
+		}
 	}
 
 	public boolean hasPath() {
@@ -160,15 +178,13 @@ public class PathfinderController {
 			return;
 		}
 
-		PathPosition start =
-			new PathPosition((int) mob.x, (int) mob.y, (int) mob.z);
+		PathPosition start = new PathPosition(mob.x, mob.y, mob.z);
 
-		PathPosition target =
-			new PathPosition(
-				targetTilePos.x,
-				targetTilePos.y,
-				targetTilePos.z
-			);
+		PathPosition target = new PathPosition(
+			targetTilePos.x,
+			targetTilePos.y,
+			targetTilePos.z
+		);
 
 		computing.set(true);
 
@@ -178,20 +194,24 @@ public class PathfinderController {
 
 				applyPath(result.getPath());
 
-				TheyAreSmarter.LOGGER.debug(
-					"[AI] PATH FOUND length={}",
+
+				TheyAreSmarter.LOGGER.info(
+					"[AI] PATH FOUND mob={} pos=({},{},{}) target=({},{},{}) length={}",
+					mob.getClass().getSimpleName(),
+					(int) mob.x, (int) mob.y, (int) mob.z,
+					targetTilePos.x, targetTilePos.y, targetTilePos.z,
 					result.getPath().length()
 				);
 			})
 			.orElse(result -> {
 				computing.set(false);
+				pathRetryTimer = recomputeInterval / 2;
+//				TheyAreSmarter.LOGGER.info(
+//					"[AI] PATH FAILED mob={} start={} target={} status={}",
+//					mob.getClass().getSimpleName(),
+//					start, target, result
+//				);
 
-				TheyAreSmarter.LOGGER.debug(
-					"[AI] PATH FAILED start={} target={} status={}",
-					start,
-					target,
-					result
-				);
 
 				pathRetryTimer = recomputeInterval / 2;
 			})
@@ -199,9 +219,12 @@ public class PathfinderController {
 				computing.set(false);
 
 				TheyAreSmarter.LOGGER.error(
-					"[AI] PATH EXCEPTION",
+					"[AI] PATH EXCEPTION mob={} pos=({},{},{})",
+					mob.getClass().getSimpleName(),
+					(int) mob.x, (int) mob.y, (int) mob.z,
 					ex
 				);
+
 
 				pathRetryTimer = recomputeInterval / 2;
 			});
@@ -209,45 +232,60 @@ public class PathfinderController {
 
 	protected void pathMotion() {
 		if (!pathValid || nodes == null) return;
+		MobAccessor accessor = (MobAccessor) mob;
+		MobPathfinder self = (MobPathfinder)(Object) mob;
+		Entity target = self.getTarget();
+
 		if (pathIndex >= nodeCount()) {
 			invalidatePath("path complete");
+			accessor.setMoveForward(0.0F);
+			accessor.setMoveStrafing(0.0F);
 			return;
 		}
 
+
+		accessor.setMoveStrafing(0.0F);
+		accessor.setMoveForward(0.0F);
+
 		int lookahead = Math.min(pathIndex + 1, nodeCount() - 1);
+		// PathPosition next = nodes.get(pathIndex);
+
 		PathPosition next = nodes.get(lookahead);
 
-		double tx = next.getX() + 0.5;
-		double tz = next.getZ() + 0.5;
+		double tx = next.getX() ;
+		double tz = next.getZ() ;
 
 		double dx = tx - mob.x;
 		double dy = next.getY() - mob.y;
 		double dz = tz - mob.z;
 
-		MobAccessor accessor = (MobAccessor) mob;
-		MobPathfinder self = (MobPathfinder)(Object) mob;
-		Entity target = self.getTarget();
 
-		accessor.setMoveStrafing(0.0F);
-		accessor.setMoveForward(0.0F);
+
 
 		if (target != null) {
 			// Face target, strafe toward path node (mirrors vanilla hasAttacked block)
-			float nodeYaw = (float)(Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
+//			float nodeYaw = (float)(Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
+//
+//			double tdx = target.x - mob.x;
+//			double tdz = target.z - mob.z;
+//			mob.yRot = (float)(Math.atan2(tdz, tdx) * 180.0D / Math.PI) - 90.0F;
+//
+//			float strafeDelta = (nodeYaw - mob.yRot + 90.0F) * (float)Math.PI / 180.0F;
+//			accessor.setMoveStrafing(-MathHelper.sin(strafeDelta) * accessor.getMoveSpeed());
+//			accessor.setMoveForward(MathHelper.cos(strafeDelta) * accessor.getMoveSpeed());
+			float targetYaw = (float)(Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
+			float diff = wrapDegrees(targetYaw - mob.yRot);
+			mob.yRot += diff * 0.95F;
 
-			double tdx = target.x - mob.x;
-			double tdz = target.z - mob.z;
-			mob.yRot = (float)(Math.atan2(tdz, tdx) * 180.0D / Math.PI) - 90.0F;
+			accessor.setMoveForward(accessor.getMoveSpeed());
+			accessor.setMoveStrafing(0.0F);
 
-			float strafeDelta = (nodeYaw - mob.yRot + 90.0F) * (float)Math.PI / 180.0F;
-			accessor.setMoveStrafing(-MathHelper.sin(strafeDelta) * accessor.getMoveSpeed());
-			accessor.setMoveForward(MathHelper.cos(strafeDelta) * accessor.getMoveSpeed());
 		} else {
 			// No target — steer toward path node normally
 			float targetYaw = (float)(Math.atan2(dz, dx) * 180.0D / Math.PI) - 90.0F;
 			float diff = wrapDegrees(targetYaw - mob.yRot);
-			diff = Math.max(-30.0F, Math.min(30.0F, diff));
-			mob.yRot += diff;
+			mob.yRot += diff * 0.95F;
+
 			accessor.setMoveForward(accessor.getMoveSpeed());
 			accessor.setMoveStrafing(0.0F);
 		}
@@ -273,18 +311,14 @@ public class PathfinderController {
 	}
 
 	private void invalidatePath(String reason) {
-
-		TheyAreSmarter.LOGGER.debug(
-			"[AI] PATH INVALIDATED reason={}",
-			reason
-		);
-
+		if (pathValid) {
+			TheyAreSmarter.LOGGER.info("[AI] PATH INVALIDATED mob={} reason={} index={}/{}",
+				mob.getClass().getSimpleName(), reason, pathIndex, nodeCount());
+		}
 		pathValid = false;
 		pathRetryTimer = recomputeInterval;
-
 		currentPath = null;
 		nodes = null;
-
 		pathIndex = 0;
 	}
 
@@ -353,6 +387,12 @@ public class PathfinderController {
 			}
 		}
 
-		if (best != null) setTarget(best);
+		if (best != null) {
+			setTarget(best);
+			TheyAreSmarter.LOGGER.info("[AI] ROAM mob={} pos=({},{},{}) best=({},{},{})",
+				mob.getClass().getSimpleName(),
+				(int) mob.x, (int) mob.y, (int) mob.z,
+				best.x, best.y, best.z);
+		}
 	}
 }
