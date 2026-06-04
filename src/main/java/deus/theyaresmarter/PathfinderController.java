@@ -42,6 +42,8 @@ public class PathfinderController {
 	protected NavigationPointProvider provider = (pos, ctx) -> () -> true;
 	protected Pathfinder pathfinder;
 	private static final double RETARGET_THRESHOLD = 2.5;
+	@Nullable
+	private volatile Path pendingPath = null;
 
 	@Nullable
 	private TilePos targetTilePos;
@@ -97,12 +99,12 @@ public class PathfinderController {
 			new MobWalkValidator(mob.world)
 		);
 	}
-
 	public void tick() {
-		
+
+
 		pathThinking();
 		pathMotion();
-		spawnPathParticles();
+		// spawnPathParticles();
 	}
 
 	public void setTarget(@Nullable TilePos target) {
@@ -153,7 +155,10 @@ public class PathfinderController {
 	}
 
 	protected void pathThinking() {
-
+		if (pendingPath != null) {
+			applyPath(pendingPath);
+			pendingPath = null;
+		}
 		if (!mob.onGround) return;
 		if (targetTilePos == null) return;
 		if (computing.get()) return;
@@ -192,6 +197,8 @@ public class PathfinderController {
 
 		pathfinder.findPath(start, target)
 			.ifPresent(result -> {
+
+				pendingPath = result.getPath();
 				computing.set(false);
 
 				applyPath(result.getPath());

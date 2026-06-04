@@ -55,10 +55,12 @@ public abstract class MobPathfinderMixin extends Mob {
 
 		if (target != null) {
 			float distance = target.distanceTo(self);
-			if (self.canEntityBeSeen(target)) {
-				accessor.callAttackEntity(target, distance);
-			} else {
-				accessor.callAttackBlockedEntity(target, distance);
+			if (distance <= 8) {
+				if (self.canEntityBeSeen(target)) {
+					accessor.callAttackEntity(target, distance);
+				} else {
+					accessor.callAttackBlockedEntity(target, distance);
+				}
 			}
 			brainless$pathfinder.setTarget(
 				new TilePos((int) target.x, (int) target.y, (int) target.z)
