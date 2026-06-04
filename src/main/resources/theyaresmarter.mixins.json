@@ -9,7 +9,8 @@
     "EntityAccessor",
     "MobAccessor",
     "MobPathfinderAccessor",
-    "MobPathfinderMixin"
+    "MobPathfinderMixin",
+    "MobWolfMixin"
   ],
   "client": []
 }

@@ -1,4 +1,4 @@
-package deus.theyaresmarter;
+package deus.theyaresmarter.ai;
 
 import de.bsommerfeld.pathetic.api.pathing.processing.ValidationProcessor;
 import de.bsommerfeld.pathetic.api.pathing.processing.context.EvaluationContext;

@@ -1,6 +1,10 @@
 package deus.theyaresmarter.mixin;
 
-import deus.theyaresmarter.PathfinderController;
+import de.bsommerfeld.pathetic.api.pathing.NeighborStrategies;
+import de.bsommerfeld.pathetic.api.pathing.heuristic.HeuristicWeights;
+import deus.theyaresmarter.ai.PathfinderController;
+import deus.theyaresmarter.ai.PathfinderSettings;
+import deus.theyaresmarter.interfaces.IHasPathfinder;
 import deus.theyaresmarter.util.PoscArea;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.Mob;
@@ -17,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MobPathfinder.class)
-public abstract class MobPathfinderMixin extends Mob {
+public abstract class MobPathfinderMixin extends Mob implements IHasPathfinder {
 	@Shadow
 	public abstract void setTarget(@Nullable Entity target);
 
@@ -31,7 +35,19 @@ public abstract class MobPathfinderMixin extends Mob {
 
 	@Inject(method = "<init>", at = @At("TAIL"))
 	private void brainless$init(World world, CallbackInfo ci) {
-		brainless$pathfinder = new PathfinderController((Mob) this);
+
+		PathfinderSettings settings = PathfinderSettings.builder()
+			.maxLength(64)
+			.maxIterations(8_000)
+			.arrivalThreshold(1.2D)
+			.recomputeInterval(60)
+			.neighborStrategy(NeighborStrategies.VERTICAL_AND_HORIZONTAL)
+			.heuristicWeights(HeuristicWeights.create(1.0, 1.0, 0.5, 0.2))
+			.async(true)
+			.build();
+
+
+		brainless$pathfinder = new PathfinderController((Mob) this, settings);
 	}
 
 	@Inject(
@@ -43,7 +59,6 @@ public abstract class MobPathfinderMixin extends Mob {
 		MobPathfinder self = (MobPathfinder) (Object) this;
 		MobPathfinderAccessor accessor = (MobPathfinderAccessor) this;
 		accessor.setHasAttacked(accessor.callIsMovementCeased());
-		accessor.setDoRandomWalk(true);
 		Entity target = self.getTarget();
 		if (target == null) {
 			target = accessor.callFindPlayerToAttack();
@@ -97,5 +112,13 @@ public abstract class MobPathfinderMixin extends Mob {
 		ci.cancel();
 	}
 
+	@Override
+	public PathfinderController theyaresmarter$getPathfinderController() {
+		return brainless$pathfinder;
+	}
 
+	@Override
+	public void theyaresmarter$setPathfinderController(PathfinderController pathfinderController) {
+		this.brainless$pathfinder = pathfinderController;
+	}
 }
