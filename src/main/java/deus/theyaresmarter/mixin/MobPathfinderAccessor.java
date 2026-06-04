@@ -15,6 +15,9 @@ public interface MobPathfinderAccessor extends MobAccessor {
 	@Accessor("doRandomWalk")
 	boolean getDoRandomWalk();
 
+	@Accessor("hasAttacked")
+	boolean getHasAttacked();
+
 	@Accessor("doRandomWalk")
 	void setDoRandomWalk(boolean value);
 

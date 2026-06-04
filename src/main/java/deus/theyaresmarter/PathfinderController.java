@@ -99,6 +99,7 @@ public class PathfinderController {
 	}
 
 	public void tick() {
+		
 		pathThinking();
 		pathMotion();
 		spawnPathParticles();
@@ -137,10 +138,11 @@ public class PathfinderController {
 		for (int i = pathIndex; i < end; i++) {
 			PathPosition p = nodes.get(i);
 			mob.world.spawnParticle("reddust",
-				p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5,
+				p.getX() , p.getY() + 0.5, p.getZ() ,
 				0.0, 0.0, 0.0, 0, false);
 		}
 	}
+
 
 	public boolean hasPath() {
 		return pathValid && currentPath != null;
@@ -252,15 +254,11 @@ public class PathfinderController {
 
 		PathPosition next = nodes.get(lookahead);
 
-		double tx = next.getX() ;
-		double tz = next.getZ() ;
-
+		double tx = next.getX() + 0.5;
+		double tz = next.getZ() + 0.5;
 		double dx = tx - mob.x;
 		double dy = next.getY() - mob.y;
 		double dz = tz - mob.z;
-
-
-
 
 		if (target != null) {
 			// Face target, strafe toward path node (mirrors vanilla hasAttacked block)
@@ -362,6 +360,7 @@ public class PathfinderController {
 			if (mob.world.isAirBlock(x, y - 1, z)) {
 				continue;
 			}
+			System.out.println(x + " : " + y + " : " + z + ":");
 
 			return new TilePos(x, y, z);
 		}
@@ -380,6 +379,7 @@ public class PathfinderController {
 			int z = MathHelper.floor(mob.z + accessor.getRandom().nextInt(13) - 6.0F);
 			TilePos candidate = new TilePos(x, y, z);
 			float weight = ((MobPathfinderAccessor)(Object)mob).callGetBlockPathWeight(candidate);
+			if (weight < 0) continue;
 			if (weight > bestWeight) {
 				bestWeight = weight;
 				if (best != null) best.set(x, y, z);

@@ -1,20 +1,26 @@
 package deus.theyaresmarter.mixin;
 
 import deus.theyaresmarter.PathfinderController;
+import deus.theyaresmarter.util.PoscArea;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.Mob;
 import net.minecraft.core.entity.MobPathfinder;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.pos.TilePos;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MobPathfinder.class)
-public class MobPathfinderMixin extends Mob {
+public abstract class MobPathfinderMixin extends Mob {
+	@Shadow
+	public abstract void setTarget(@Nullable Entity target);
+
 	@Unique
 	private PathfinderController brainless$pathfinder;
 
@@ -37,7 +43,7 @@ public class MobPathfinderMixin extends Mob {
 		MobPathfinder self = (MobPathfinder) (Object) this;
 		MobPathfinderAccessor accessor = (MobPathfinderAccessor) this;
 		accessor.setHasAttacked(accessor.callIsMovementCeased());
-		accessor.setDoRandomWalk(false);
+		accessor.setDoRandomWalk(true);
 		Entity target = self.getTarget();
 		if (target == null) {
 			target = accessor.callFindPlayerToAttack();
@@ -60,11 +66,25 @@ public class MobPathfinderMixin extends Mob {
 			brainless$pathfinder.tick();
 			self.lookAt(target, 30.0F, 30.0F);
 		} else {
-			brainless$pathfinder.setTarget(null);
-			if (accessor.getDoRandomWalk() && accessor.getRandom().nextInt(80) == 0) {
-				brainless$pathfinder.roamRandomPath();
+			if (accessor.getDoRandomWalk()
+				&& !accessor.getHasAttacked()
+				&& accessor.getRandom().nextInt(80) == 0) {
+
+				int r = 8 + random.nextInt(8);
+				TilePos roam = brainless$pathfinder.roamRandomPath(new PoscArea.Area2D(
+					new TilePos(self.x - r, self.y, self.z - r),
+					new TilePos(self.x + r, self.y, self.z + r)));
+				if (roam != null) {
+					brainless$pathfinder.setTarget(roam);
+				} else {
+					brainless$pathfinder.setTarget(null);
+				}
+
 			}
+			brainless$pathfinder.tick();
 		}
+
+
 
 		if (self.horizontalCollision && !brainless$pathfinder.hasPath()) {
 			accessor.setIsJumping(true);

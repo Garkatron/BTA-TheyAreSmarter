@@ -22,32 +22,57 @@ public class BlockCostProcessor implements CostProcessor {
 		int cy = (int) pos.getY();
 		int cz = (int) pos.getZ();
 
-
 		TilePos scan = new TilePos();
-		double maxPenalty = 0.0;
 
-		for (int dx = -3; dx <= 3; dx++) {
-			for (int dz = -3; dz <= 3; dz++) {
-				for (int dy = -1; dy <= 1; dy++) {
-					scan.set(cx + dx, cy + dy, cz + dz);
-					var type = world.getBlockType(scan);
+		scan.set(cx, cy - 1, cz);
 
-					if (type.hasTag(BlockTags.IS_LAVA)) {
-						double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-						double penalty = 20.0 / (dist + 0.5);
-						if (penalty > maxPenalty) maxPenalty = penalty;
-					}
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dz = -1; dz <= 1; dz++) {
+
+				if (dx == 0 && dz == 0) continue;
+
+				scan.set(cx + dx, cy - 1, cz + dz);
+
+				if (world.getBlockType(scan).hasTag(BlockTags.IS_LAVA)) {
+					return Cost.of(1000);
 				}
 			}
 		}
 
-		if (maxPenalty > 0) return Cost.of(maxPenalty);
+		boolean hasSupportAround = false;
+
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dz = -1; dz <= 1; dz++) {
+
+				scan.set(cx + dx, cy - 1, cz + dz);
+
+				if (world.getBlockType(scan).isCollidable()) {
+					hasSupportAround = true;
+					break;
+				}
+			}
+			if (hasSupportAround) break;
+		}
+
+		if (!hasSupportAround) {
+			return Cost.of(30.0);
+		}
 
 		scan.set(cx, cy - 1, cz);
-		if (!world.getBlockType(scan).isCollidable()) return Cost.of(4.0);
+		if (!world.getBlockType(scan).isCollidable()) {
+			return Cost.of(4.0);
+		}
 
 		scan.set(cx, cy, cz);
-		if (world.getBlockType(scan).hasTag(BlockTags.IS_WATER)) return Cost.of(5.0);
+		if (world.getBlockType(scan).hasTag(BlockTags.IS_WATER)) {
+			return Cost.of(5.0);
+		}
+
+		scan.set(cx, cy - 1, cz);
+
+		if (!world.getBlockType(scan).isCollidable()) {
+			return Cost.of(6.0);
+		}
 
 		return Cost.ZERO;
 	}
