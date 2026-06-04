@@ -6,24 +6,27 @@ import deus.theyaresmarter.ai.PathfinderController;
 import deus.theyaresmarter.entities.GenericStates.TerminalStates;
 import deus.theyaresmarter.entities.GenericStates.WalkerStates;
 import deus.theyaresmarter.entities.GenericStates.CombatStates;
-import deus.theyaresmarter.entities.GenericStates.SocialStates;
 import deus.theyaresmarter.interfaces.IHasPathfinder;
+import deus.theyaresmarter.interfaces.IHasProtectAreas;
 import deus.theyaresmarter.mixin.EntityAccessor;
-import deus.theyaresmarter.mixin.MobAccessor;
 import deus.theyaresmarter.mixin.MobPathfinderAccessor;
 import deus.theyaresmarter.util.PoscArea;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.EntityItem;
-import net.minecraft.core.entity.MobPathfinder;
+import net.minecraft.core.entity.Mob;
+import net.minecraft.core.entity.animal.MobAnimal;
 import net.minecraft.core.entity.animal.MobWolf;
+import net.minecraft.core.entity.monster.MobSkeleton;
 import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.util.helper.MathHelper;
 import net.minecraft.core.world.pos.TilePos;
+import net.minecraft.core.world.pos.TilePosc;
 import org.joml.primitives.AABBd;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Supplier;
 public class FSMMobWolf {
 
@@ -99,6 +102,82 @@ public class FSMMobWolf {
 				);
 			})
 
+			.onEnter(WolfStates.PROTECT_BONE, (ctx, state) -> {
+				MobPathfinderAccessor accessor = (MobPathfinderAccessor) ctx;
+				List<TilePosc> areas = ((IHasProtectAreas)ctx).theyaresmarter$getBonesPositions();
+				TilePosc selected = areas.get(accessor.getRandom().nextInt(areas.size()));
+				PathfinderController controller = ((IHasPathfinder) ctx).theyaresmarter$getPathfinderController();
+				controller.setTarget(new TilePos(selected));
+			})
+			.onEnter(WolfStates.HUNT_ANIMAL, (ctx, state) -> {
+				Mob prey = findNearbyPrey(ctx);
+				if (prey == null) return;
+				PathfinderController controller = ((IHasPathfinder) ctx).theyaresmarter$getPathfinderController();
+				controller.setTrackedEntity(prey);
+				ctx.setTarget(prey);
+			})
+
+
+			.on(WolfStates.HUNT_ANIMAL, ctx -> {
+				Entity target = ctx.getTarget();
+				if (target == null) return;
+				double dx = target.x - ctx.x;
+				double dy = target.y - ctx.y;
+				double dz = target.z - ctx.z;
+				float distance = MathHelper.sqrt((float)(dx*dx + dy*dy + dz*dz));
+				((MobPathfinderAccessor) ctx).callAttackEntity(target, distance);
+			})
+
+			.on(WolfStates.PROTECT_BONE, ctx -> {
+				System.out.println("WOLF PROTECT BONE");
+				PathfinderController controller = ((IHasPathfinder) ctx).theyaresmarter$getPathfinderController();
+				controller.setTarget(null);
+				AABBd checkBB = new AABBd(ctx.x, ctx.y, ctx.z, ctx.x + (double)1.0F, ctx.y + (double)1.0F, ctx.z + (double)1.0F);
+				MathHelper.aabbGrow(checkBB, 16.0F, 4.0F, 16.0F, checkBB);
+				Player owner = ctx.world.getPlayerEntityByUUID(ctx.getWolfOwner());
+
+				List<Mob> mobs = ctx.world.getEntitiesWithinAABB(Mob.class, checkBB).stream()
+					.filter(m -> {
+						if (m == ctx || m == owner) return false;
+						if (owner == null) return false;
+
+						// same owner wolf = ally, exclude
+						if (m instanceof MobWolf ally) {
+							return !Objects.equals(ally.getWolfOwner(), owner.uuid);
+						}
+
+						// wolf with bones = ally, exclude
+						if (m instanceof IHasProtectAreas ally) {
+							return ally.theyaresmarter$getBonesPositions().isEmpty();
+						}
+
+						return true;
+					}).toList();
+
+				if (mobs.isEmpty()) {
+					return;
+				}
+
+				Mob threat = mobs.get(((MobPathfinderAccessor) ctx).getRandom().nextInt(mobs.size()));
+				ctx.setTarget(threat);
+				controller.setTrackedEntity(threat);
+			})
+
+			.transition(WolfStates.PROTECT_BONE, ctx -> {
+
+				List<TilePosc> areas = ((IHasProtectAreas) ctx).theyaresmarter$getBonesPositions();
+
+				if (areas.isEmpty()) return WalkerStates.IDLE;
+				if (ctx.getTarget() != null) return CombatStates.ATTACKING;
+
+
+
+				boolean nearAnyArea = areas.stream().anyMatch(pos -> pos.distance(ctx) < 5);
+				if (nearAnyArea) return WalkerStates.IDLE;
+
+				return WolfStates.PROTECT_BONE;
+			})
+
 			.transition(WolfStates.FOLLOW_OWNER, ctx -> {
 				PathfinderController controller = ((IHasPathfinder) ctx).theyaresmarter$getPathfinderController();
 				Player owner = ctx.world.getPlayerEntityByUUID(ctx.getWolfOwner());
@@ -137,6 +216,16 @@ public class FSMMobWolf {
 				return WolfStates.SIT;
 			})
 
+			.transition(WolfStates.HUNT_ANIMAL, ctx -> {
+				Entity target = ctx.getTarget();
+				if (target == null || target.isRemoved() || !target.isAlive()) {
+					((IHasPathfinder) ctx).theyaresmarter$getPathfinderController().setTrackedEntity(null);
+					return WalkerStates.IDLE;
+				}
+				if (ctx.isWolfAngry()) return CombatStates.ATTACKING;
+				return WolfStates.HUNT_ANIMAL;
+			})
+
 			.transition(WalkerStates.IDLE, ctx -> {
 				PathfinderController controller = ((IHasPathfinder) ctx).theyaresmarter$getPathfinderController();
 				MobPathfinderAccessor accessor = (MobPathfinderAccessor) ctx;
@@ -149,8 +238,6 @@ public class FSMMobWolf {
 				if (item != null) {
 					return WolfStates.FIND_OBJECT;
 				}
-
-
 
 				if (ctx.isWolfAngry() || ctx.getTarget() != null) {
 					if (ctx.hasCurrentTarget()) return CombatStates.ATTACKING;
@@ -171,13 +258,27 @@ public class FSMMobWolf {
 				Player owner = ctx.world.getPlayerEntityByUUID(ctx.getWolfOwner());
 				if (owner != null) {
 					float ownerDistance = owner.distanceTo(ctx);
-					if (ownerDistance > 12.0F) return WolfStates.FOLLOW_OWNER;
+					if (ownerDistance > 12.0F) {
+						tpToOwner(ctx, owner);
+						return WalkerStates.IDLE;
+					} else if (ownerDistance > 9.0F) {
+						return WolfStates.FOLLOW_OWNER;
+					}
+				}
+
+				List<TilePosc> areas = ((IHasProtectAreas)ctx).theyaresmarter$getBonesPositions();
+				if (!areas.isEmpty()) {
+					return WolfStates.PROTECT_BONE;
 				}
 
 				if (ctx.getTarget() == null && accessor.getDoRandomWalk()
 					&& !accessor.getHasAttacked()
-					&& accessor.getRandom().nextInt(40) == 0) return WalkerStates.ROAM;
+					&& accessor.getRandom().nextInt(60) == 0) return WalkerStates.ROAM;
 
+				if (!ctx.isWolfTamed()) {
+					Mob prey = findNearbyPrey(ctx);
+					if (prey != null) return WolfStates.HUNT_ANIMAL;
+				}
 
 				return WalkerStates.IDLE;
 			})
@@ -199,11 +300,29 @@ public class FSMMobWolf {
 			})
 		);
 
-	public enum WolfStates implements FSMState {
+	private static boolean tpToOwner(MobWolf ctx, Player owner) {
+		int targetX = MathHelper.floor(owner.x);
+		int targetY = MathHelper.floor(owner.bb.minY);
+		int targetZ = MathHelper.floor(owner.z);
 
+		for(int _x = -2; _x <= 2; ++_x) {
+			for(int _z = -2; _z <= 2; ++_z) {
+				if ((Math.abs(_x) > 1 || Math.abs(_z) > 1) && ctx.world.isBlockNormalCube(targetX + _x, targetY - 1, targetZ + _z) && !ctx.world.isBlockNormalCube(targetX + _x, targetY, targetZ + _z) && !ctx.world.isBlockNormalCube(targetX + _x, targetY + 1, targetZ + _z)) {
+					ctx.moveTo((double)((float)(targetX + _x) + 0.5F), (double)targetY, (double)((float)(targetZ + _z) + 0.5F), ctx.yRot, ctx.xRot);
+					ctx.fallDistance = 0.0F;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	public enum WolfStates implements FSMState {
+		PROTECT_BONE,
 		SIT,
 		FIND_OBJECT,
-		FOLLOW_OWNER
+		FOLLOW_OWNER,
+		HUNT_ANIMAL
 	}
 
 	public static EntityItem findNearbyItem(MobWolf wolf) {
@@ -257,5 +376,20 @@ public class FSMMobWolf {
 		}
 
 		return valid.get(wolf.world.rand.nextInt(valid.size()));
+	}
+
+	public static Mob findNearbyPrey(MobWolf wolf) {
+		AABBd checkBB = new AABBd(wolf.x, wolf.y, wolf.z,
+			wolf.x + 1.0D, wolf.y + 1.0D, wolf.z + 1.0D);
+		MathHelper.aabbGrow(checkBB, 12.0D, 4.0D, 12.0D, checkBB);
+
+		List<Mob> prey = wolf.world.getEntitiesWithinAABB(Mob.class, checkBB)
+			.stream()
+			.filter(m -> !m.isRemoved() && m.isAlive() && m != wolf)
+			.filter(m -> m instanceof MobAnimal || m instanceof MobSkeleton)
+			.toList();
+
+		if (prey.isEmpty()) return null;
+		return prey.get(wolf.world.rand.nextInt(prey.size()));
 	}
 }

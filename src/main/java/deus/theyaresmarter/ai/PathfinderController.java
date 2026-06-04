@@ -257,7 +257,7 @@ public class PathfinderController {
 		double dz = tz - mob.z;
 
 		steerToward(accessor, dx, dz);
-		accessor.setIsJumping(dy > 1.0D && mob.onGround);
+		accessor.setIsJumping((dy > 1.0D || mob.horizontalCollision) && mob.onGround);
 
 		double dist = Math.sqrt(dx * dx + dz * dz);
 		if (dist < settings.arrivalThreshold) {
