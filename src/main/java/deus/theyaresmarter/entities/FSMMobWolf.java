@@ -113,15 +113,17 @@ public class FSMMobWolf {
 
 			.transition(WalkerStates.IDLE, ctx -> {
 				if (ctx.isWolfSitting()) return WolfStates.SIT;
-				if (getController(ctx).hasPath()) return WalkerStates.WALKING;
-
-				FSMState combat = checkCombatTransition(ctx);
-				if (combat != null) return combat;
 
 				if (ctx.isWolfTamed()) {
 					FSMState owner = checkOwnerTransition(ctx);
 					if (owner != null) return owner;
 				}
+
+				if (getController(ctx).hasPath()) return WalkerStates.WALKING;
+
+				FSMState combat = checkCombatTransition(ctx);
+				if (combat != null) return combat;
+
 
 				if (((MobPathfinderAccessor) ctx).getRandom().nextInt(40) == 0) {
 					if (findNearbyItem(ctx) != null) return WolfStates.FIND_OBJECT;
@@ -307,22 +309,14 @@ public class FSMMobWolf {
 		return true;
 	}
 
+	// ! TP DOESN'T WORK
 	private static boolean tpToOwner(MobWolf ctx, Player owner) {
-		int tx = MathHelper.floor(owner.x);
-		int ty = MathHelper.floor(owner.bb.minY);
-		int tz = MathHelper.floor(owner.z);
-
-		for (int dx = -2; dx <= 2; dx++) {
-			for (int dz = -2; dz <= 2; dz++) {
-				if ((Math.abs(dx) > 1 || Math.abs(dz) > 1)
-					&& ctx.world.isBlockNormalCube(tx + dx, ty - 1, tz + dz)
-					&& !ctx.world.isBlockNormalCube(tx + dx, ty, tz + dz)
-					&& !ctx.world.isBlockNormalCube(tx + dx, ty + 1, tz + dz)) {
-					ctx.moveTo((tx + dx) + 0.5, ty, (tz + dz) + 0.5, ctx.yRot, ctx.xRot);
-					ctx.fallDistance = 0.0F;
-					return true;
-				}
-			}
+		IHasPathfinder accessor = (IHasPathfinder) ctx;
+		TilePosc pos = accessor.theyaresmarter$getPathfinderController().getlastNodeTilePosc();
+		if (pos != null) {
+			ctx.moveTo(pos.x(), pos.y(), pos.z(), ctx.yRot, ctx.xRot);
+			ctx.fallDistance = 0.0F;
+			return true;
 		}
 		return false;
 	}

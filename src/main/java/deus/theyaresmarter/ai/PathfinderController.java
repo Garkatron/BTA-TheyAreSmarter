@@ -17,6 +17,7 @@ import net.minecraft.core.entity.Mob;
 import net.minecraft.core.entity.MobPathfinder;
 import net.minecraft.core.util.helper.MathHelper;
 import net.minecraft.core.world.pos.TilePos;
+import net.minecraft.core.world.pos.TilePosc;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -227,6 +228,15 @@ public class PathfinderController {
 				);
 				pathRetryTimer = settings.failureRetryTimer;
 			});
+	}
+
+	public @Nullable TilePosc getlastNodeTilePosc() {
+		PathPosition node = null;
+		if (nodes != null && !nodes.isEmpty()) {
+			node = nodes.get(nodes.size()-1);
+			return new TilePos(node.getX(), node.getY(), node.getZ());
+		}
+		return null;
 	}
 
 	protected void pathMotion() {
