@@ -1,8 +1,10 @@
 package deus.theyaresmarter.mixin;
 
+import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.Mob;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.util.Random;
 
@@ -26,4 +28,7 @@ public interface MobAccessor extends EntityAccessor {
 
 	@Accessor("moveStrafing")
 	void setMoveStrafing(float value);
+
+	@Invoker("getLookingTilt")
+	int callGetLookingTilt();
 }

@@ -250,6 +250,11 @@ public class PathfinderController {
 		int lookahead = Math.min(pathIndex + 1, nodeCount() - 1);
 		PathPosition next = nodes.get(lookahead);
 
+
+		if (trackedEntity != null && trackedEntity.distanceTo(mob) <= 3) {
+			mob.lookAt(trackedEntity, 30.0F,  (float)((MobAccessor)mob).callGetLookingTilt());
+		}
+
 		double tx = next.getX() + 0.5;
 		double tz = next.getZ() + 0.5;
 		double dx = tx - mob.x;
