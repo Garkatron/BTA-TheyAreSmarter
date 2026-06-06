@@ -255,16 +255,19 @@ public class FSMMobWolf {
 					}
 				}
 
-				Player owner = ctx.world.getPlayerEntityByUUID(ctx.getWolfOwner());
-				if (owner != null) {
-					float ownerDistance = owner.distanceTo(ctx);
-					if (ownerDistance > 12.0F) {
-						tpToOwner(ctx, owner);
-						return WalkerStates.IDLE;
-					} else if (ownerDistance > 9.0F) {
-						return WolfStates.FOLLOW_OWNER;
+				if (ctx.isWolfTamed()) {
+					Player owner = ctx.world.getPlayerEntityByUUID(ctx.getWolfOwner());
+					if (owner != null) {
+						float ownerDistance = owner.distanceTo(ctx);
+						if (ownerDistance > 12.0F) {
+							tpToOwner(ctx, owner);
+							return WalkerStates.IDLE;
+						} else if (ownerDistance > 9.0F) {
+							return WolfStates.FOLLOW_OWNER;
+						}
 					}
 				}
+
 
 				List<TilePosc> areas = ((IHasProtectAreas)ctx).theyaresmarter$getBonesPositions();
 				if (!areas.isEmpty()) {

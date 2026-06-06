@@ -1,5 +1,7 @@
 package deus.theyaresmarter.mixin;
 
+import com.mojang.nbt.tags.CompoundTag;
+import com.mojang.nbt.tags.ListTag;
 import de.bsommerfeld.pathetic.api.pathing.NeighborStrategies;
 import de.bsommerfeld.pathetic.api.pathing.heuristic.HeuristicWeights;
 import deus.brainless.ai.fsm.interfaces.FSMState;
@@ -7,12 +9,14 @@ import deus.brainless.fsm.FiniteStateMachine;
 import deus.theyaresmarter.ai.PathfinderController;
 import deus.theyaresmarter.ai.PathfinderSettings;
 import deus.theyaresmarter.entities.FSMMobWolf;
+import deus.theyaresmarter.entities.GenericStates;
 import deus.theyaresmarter.interfaces.IHasPathfinder;
 import deus.theyaresmarter.interfaces.IHasProtectAreas;
 import net.minecraft.core.block.Blocks;
 import net.minecraft.core.entity.Mob;
 import net.minecraft.core.entity.animal.MobAnimal;
 import net.minecraft.core.entity.animal.MobWolf;
+import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.item.ItemFood;
 import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.item.tag.ItemTags;
@@ -27,6 +31,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +50,39 @@ public abstract class MobWolfMixin extends MobAnimal implements IHasProtectAreas
 
 	public MobWolfMixin(World world) {
 		super(world);
+	}
+
+	@Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
+	private void saveBones(CompoundTag tag, CallbackInfo ci) {
+		ListTag list = new ListTag();
+		for (TilePosc pos : bonePositions) {
+			CompoundTag p = new CompoundTag();
+			p.putInt("x", pos.x());
+			p.putInt("y", pos.y());
+			p.putInt("z", pos.z());
+			list.addTag(p);
+		}
+		tag.putList("BonePositions", list);
+	}
+
+	@Inject(method = "readAdditionalSaveData", at = @At("TAIL"))
+	private void loadBones(CompoundTag tag, CallbackInfo ci) {
+		bonePositions.clear();
+		ListTag list = tag.getList("BonePositions");
+		if (list != null) {
+			for (int i = 0; i < list.tagCount(); i++) {
+				CompoundTag p = (CompoundTag) list.getValue().get(i);
+				bonePositions.add(new TilePos(p.getInteger("x"), p.getInteger("y"), p.getInteger("z")));
+			}
+		}
+	}
+
+	@Inject(method = "readAdditionalSaveData", at = @At("TAIL"))
+	private void restoreFsmState(CompoundTag tag, CallbackInfo ci) {
+		MobWolf self = (MobWolf)(Object)this;
+		if (self.isWolfSitting()) {
+			fsm.forceState(self, FSMMobWolf.WolfStates.SIT);
+		}
 	}
 
 	@Inject(method = "<init>", at = @At("TAIL"))
@@ -80,6 +118,25 @@ public abstract class MobWolfMixin extends MobAnimal implements IHasProtectAreas
 		ci.cancel();
 	}
 
+	@Unique
+	public void theyaresmarter$syncFsmFromFlags() {
+		MobWolf self = (MobWolf)(Object)this;
+		if (self.isWolfSitting()) {
+			fsm.forceState(self, FSMMobWolf.WolfStates.SIT);
+		} else {
+			fsm.forceState(self, GenericStates.WalkerStates.IDLE);
+		}
+	}
+
+	@Inject(method = "interact", at = @At("TAIL"))
+	private void onInteract(Player player, CallbackInfoReturnable<Boolean> cir) {
+		MobWolf self = (MobWolf) (Object) this;
+		if (cir.getReturnValue()) {
+			theyaresmarter$syncFsmFromFlags();
+		}
+
+	}
+
 	@Inject(method = "tick", at = @At("TAIL"))
 	private void brainless$updateTick(CallbackInfo ci) {
 		MobWolf self = (MobWolf) (Object) this;
@@ -104,7 +161,6 @@ public abstract class MobWolfMixin extends MobAnimal implements IHasProtectAreas
 
 			if (bonePositions.stream().noneMatch(p -> p.equals(pos))) {
 				bonePositions.add(pos);
-				System.out.println("AAAAAAAAAAaa");
 			}
 		}
 	}
